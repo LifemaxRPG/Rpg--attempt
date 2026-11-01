@@ -46,15 +46,16 @@ func _cube(parent: Node3D, name: String, position: Vector3, size: Vector3, color
 	return mesh_instance
 
 func _build_world() -> void:
-	_cube(self, "Grass", Vector3(0, -0.15, 0), Vector3(36, 0.3, 36), Color("#78b953"))
+	_cube(self, "Grass", Vector3(0, -0.15, 0), Vector3(36, 0.3, 36), Color("#5aaf58"))
 	for x in range(-16, 17):
 		for z in range(-16, 17):
 			if abs(x) <= 2 or (z >= -2 and z <= 1):
-				_cube(self, "Path", Vector3(x, 0.015, z), Vector3(1, 0.035, 1), Color("#d9c18a"))
+				_cube(self, "Path", Vector3(x, 0.015, z), Vector3(1, 0.035, 1), Color("#77718f"))
 			elif rng.randf() < 0.12:
-				_cube(self, "GrassTuft", Vector3(x + 0.2, 0.07, z), Vector3(0.16, 0.12, 0.2), Color("#4e923e"))
-	_build_house(Vector3(-7, 0, -5), Color("#e7cda0"), Color("#c45e56"))
-	_build_house(Vector3(7, 0, -6), Color("#d9dfac"), Color("#657fc4"))
+				_cube(self, "GrassTuft", Vector3(x + 0.2, 0.07, z), Vector3(0.16, 0.12, 0.2), Color("#238d54"))
+	_build_house(Vector3(-7, 0, -5), Color("#ddd8c7"), Color("#665d86"))
+	_build_house(Vector3(7, 0, -6), Color("#e7b4b9"), Color("#7e6c9b"))
+	_build_city_details()
 	for i in range(22):
 		var x := rng.randi_range(-15, 15)
 		var z := rng.randi_range(-15, 15)
@@ -74,6 +75,29 @@ func _build_world() -> void:
 	env.ambient_light_energy = 0.7
 	environment.environment = env
 	add_child(environment)
+
+func _build_city_details() -> void:
+	# Compact city-district dressing with the Kenney PICO-8 City palette.
+	# Keep decorative geometry outside the central movement corridors.
+	for side in [-1, 1]:
+		for z in [-12, -9, 4, 9, 13]:
+			var x := float(side * 3)
+			_cube(self, "Sidewalk", Vector3(x, 0.035, z), Vector3(1.0, 0.06, 1.0), Color("#a39cba"))
+			_cube(self, "Curb", Vector3(x + side * 0.44, 0.09, z), Vector3(0.12, 0.1, 1.0), Color("#d5cce3"))
+	for z in [-13, -8, 6, 11]:
+		for side in [-1, 1]:
+			var x := float(side * 5)
+			_cube(self, "StreetlampPole", Vector3(x, 1.0, z), Vector3(0.14, 2.0, 0.14), Color("#57546e"))
+			_cube(self, "StreetlampHead", Vector3(x, 2.12, z), Vector3(0.48, 0.3, 0.48), Color("#ffdc77"))
+			_cube(self, "StreetlampCap", Vector3(x, 2.32, z), Vector3(0.62, 0.12, 0.62), Color("#57546e"))
+	for x in [-11, -10, 10, 11]:
+		for z in [5, 6]:
+			_cube(self, "PlazaStone", Vector3(x, 0.045, z), Vector3(0.94, 0.055, 0.94), Color("#a69bb6"))
+	for x in [-11.5, 11.5]:
+		_cube(self, "Planter", Vector3(x, 0.34, 3.5), Vector3(1.1, 0.65, 1.1), Color("#a46e78"))
+		_cube(self, "PlanterLeaves", Vector3(x, 0.82, 3.5), Vector3(0.94, 0.48, 0.94), Color("#39ad62"))
+	for z in [-15, 15]:
+		_cube(self, "TownBoundary", Vector3(0, 0.3, z), Vector3(35, 0.6, 0.2), Color("#68627d"))
 
 func _build_house(at: Vector3, wall: Color, roof: Color) -> void:
 	var house := Node3D.new()
@@ -151,14 +175,14 @@ func _build_hud() -> void:
 	hud.add_child(root)
 	var title := Label.new()
 	title.name = "Title"
-	title.text = "RPG ATTEMPT  |  PROTOTYPE 001"
+	title.text = "RPG ATTEMPT  |  CITY DISTRICT"
 	title.position = Vector2(18, 16)
 	title.add_theme_font_size_override("font_size", 19)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(title)
 	var hint := Label.new()
 	hint.name = "Hint"
-	hint.text = "Drag the left side to move  •  WASD / arrows on keyboard"
+	hint.text = "Explore the town  •  Drag left to move  •  WASD"
 	hint.position = Vector2(18, 46)
 	hint.add_theme_font_size_override("font_size", 13)
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
