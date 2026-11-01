@@ -21,6 +21,8 @@ var rng := RandomNumberGenerator.new()
 var in_past := false
 var planted_seed := false
 var repaired_clock := false
+var founded_market := false
+const MARKET_SITE := Vector3(12, 0, -1)
 var era_visuals: Node3D
 var journal_panel: PanelContainer
 var journal_text: Label
@@ -171,11 +173,12 @@ func _load_progress() -> void:
 	if typeof(data) == TYPE_DICTIONARY:
 		planted_seed = data.get("planted_seed", false) == true
 		repaired_clock = data.get("repaired_clock", false) == true
+		founded_market = data.get("founded_market", false) == true
 
 func _save_progress() -> void:
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file != null:
-		file.store_string(JSON.stringify({"version": 1, "planted_seed": planted_seed, "repaired_clock": repaired_clock}))
+		file.store_string(JSON.stringify({"version": 1, "planted_seed": planted_seed, "repaired_clock": repaired_clock, "founded_market": founded_market}))
 
 func _build_era_visuals() -> void:
 	era_visuals = Node3D.new()
@@ -203,6 +206,18 @@ func _refresh_era_visuals() -> void:
 			_cube(era_visuals, "ClockFace", CLOCK_SITE + Vector3(0, 3.2, 0.82), Vector3(0.85, 0.85, 0.12), Color("#f9df9b"))
 		else:
 			_cube(era_visuals, "ClockRuins", CLOCK_SITE + Vector3(0, 0.4, 0), Vector3(1.5, 0.8, 1.5), Color("#787486"))
+	_build_market_visuals()
+
+func _build_market_visuals() -> void:
+	if in_past:
+		_cube(era_visuals, "MarketFoundation", MARKET_SITE + Vector3(0, 0.12, 0), Vector3(2.3, 0.24, 2.3), Color("#8b7257"))
+		_cube(era_visuals, "MarketSign", MARKET_SITE + Vector3(0, 0.65, 0), Vector3(0.8, 0.8, 0.2), Color("#67bc77" if founded_market else "#f1c574"))
+	elif founded_market:
+		for offset in [-1.8, 0.0, 1.8]:
+			_cube(era_visuals, "MarketStall", MARKET_SITE + Vector3(offset, 0.55, 0), Vector3(1.5, 1.1, 1.3), Color("#d9b892"))
+			_cube(era_visuals, "MarketAwning", MARKET_SITE + Vector3(offset, 1.25, 0), Vector3(1.7, 0.32, 1.5), Color("#d9717c"))
+	else:
+		_cube(era_visuals, "VacantMarketLot", MARKET_SITE + Vector3(0, 0.05, 0), Vector3(2.8, 0.1, 2.8), Color("#8b8c91"))
 
 func _build_era_objects() -> void:
 	era_objects = Node3D.new()
@@ -245,6 +260,18 @@ func _travel_time() -> void:
 			message_label.text = "YEAR 2026: The plot is empty. Change the past!"
 
 func _interact() -> void:
+	if player.position.distance_to(MARKET_SITE) <= 2.5:
+		if in_past and not founded_market:
+			founded_market = true
+			_save_progress()
+			_refresh_era_visuals()
+			_update_journal()
+			message_label.text = "You founded the market! See the shops in 2026."
+		elif in_past:
+			message_label.text = "The first merchants are gathering here."
+		else:
+			message_label.text = "A thriving market!" if founded_market else "Vacant lot. Found a market in 1926!"
+		return
 	if player.position.distance_to(NPC_SITE) <= 2.5:
 		_talk_historian()
 		return
@@ -292,6 +319,9 @@ func _build_npc() -> void:
 	_atlas_sprite(npc, "HistorianBadge", Rect2(160, 88, 16, 24), Vector3(0, 1.2, 0.34), 0.045)
 
 func _talk_historian() -> void:
+	if founded_market and planted_seed and repaired_clock:
+		message_label.text = "Historian: Three changes! You have transformed our town."
+		return
 	if in_past:
 		message_label.text = "Historian: A clock and a seed can rewrite a century."
 	elif planted_seed and repaired_clock:
@@ -307,8 +337,9 @@ func _update_journal() -> void:
 	if journal_text == null:
 		return
 	var tree_status := "DONE - Ancient tree thrives in 2026" if planted_seed else "OPEN - Plant a seed in 1926 (east)"
+	var market_status := "DONE - Future market founded" if founded_market else "OPEN - Found market in 1926 (+12,-1)"
 	var clock_status := "DONE - Clock tower restored in 2026" if repaired_clock else "OPEN - Repair clock in 1926 (west)"
-	journal_text.text = "THE FIRST PARADOX\\n\\n1. %s\\n\\n2. %s\\n\\nTalk to the historian near the north road.\\nProgress saves automatically." % [tree_status, clock_status]
+	journal_text.text = "THE FIRST PARADOX\\n\\n1. %s\\n\\n2. %s\\n\\n3. %s\\n\\nTalk to the historian near the north road.\\nProgress saves automatically." % [tree_status, clock_status, market_status]
 
 func _toggle_journal() -> void:
 	journal_panel.visible = not journal_panel.visible
@@ -420,7 +451,7 @@ func _build_hud() -> void:
 	journal_panel = PanelContainer.new()
 	journal_panel.name = "JournalPanel"
 	journal_panel.position = Vector2(18, 165)
-	journal_panel.custom_minimum_size = Vector2(390, 195)
+	journal_panel.custom_minimum_size = Vector2(390, 245)
 	journal_panel.visible = false
 	root.add_child(journal_panel)
 	journal_text = Label.new()
