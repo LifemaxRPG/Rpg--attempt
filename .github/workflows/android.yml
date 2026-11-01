@@ -81,12 +81,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build
-          godot --headless --verbose --path . --export-debug "Android" build/rpg-attempt-debug.apk
+          godot --headless --verbose --path . --export-debug "Android" build/rpg-attempt-debug.apk 2>&1 | tee build/export.log
           test -s build/rpg-attempt-debug.apk
       - name: Diagnose export failure
         if: failure()
         shell: bash
         run: |
+          echo "=== Export log: first 45 lines ==="
+          sed -n '1,45p' build/export.log || true
+          echo "=== Export log: error and warning lines ==="
+          grep -inE "error|warning|invalid|missing|not found|cannot|failed" build/export.log || true
           echo "=== Android SDK and Java ==="
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
           echo "JAVA_HOME=${JAVA_HOME:-unset}"
