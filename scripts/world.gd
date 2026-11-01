@@ -18,12 +18,21 @@ var facing := Vector2.DOWN
 var elapsed := 0.0
 var obstacles: Array[Rect2] = []
 var rng := RandomNumberGenerator.new()
+var in_past := false
+var planted_seed := false
+var era_objects: Node3D
+var plot_marker: Node3D
+var message_label: Label
+var era_button: Button
+var action_button: Button
+const PLOT := Vector3(7, 0, 7)
 var city_atlas: Texture2D = preload("res://assets/kenney/city_atlas.png")
 
 func _ready() -> void:
 	rng.seed = 20261101
 	_build_world()
 	_build_player()
+	_build_era_objects()
 	_build_camera()
 	_build_hud()
 	get_viewport().size_changed.connect(_layout_hud)
@@ -141,6 +150,63 @@ func _build_tree(at: Vector3) -> void:
 	_atlas_sprite(tree, "KenneyCityTree", Rect2(176, 88, 16, 24), Vector3(0, 1.75, 0.9), 0.12)
 	obstacles.append(Rect2(Vector2(at.x - 0.55, at.z - 0.55), Vector2(1.1, 1.1)))
 
+func _build_era_objects() -> void:
+	era_objects = Node3D.new()
+	era_objects.name = "TimelineObjects"
+	add_child(era_objects)
+	plot_marker = Node3D.new()
+	plot_marker.position = PLOT
+	era_objects.add_child(plot_marker)
+	_refresh_timeline()
+
+func _refresh_timeline() -> void:
+	if plot_marker == null:
+		return
+	for child in plot_marker.get_children():
+		child.queue_free()
+	if in_past:
+		_cube(plot_marker, "Soil", Vector3(0, 0.04, 0), Vector3(1.7, 0.08, 1.7), Color("#926b4c"))
+		if planted_seed:
+			_cube(plot_marker, "Sapling", Vector3(0, 0.35, 0), Vector3(0.14, 0.7, 0.14), Color("#65c269"))
+		else:
+			_cube(plot_marker, "SeedMarker", Vector3(0, 0.24, 0), Vector3(0.45, 0.4, 0.45), Color("#f5d781"))
+	elif planted_seed:
+		_cube(plot_marker, "FutureTrunk", Vector3(0, 1.4, 0), Vector3(0.65, 2.8, 0.65), Color("#80543b"))
+		_cube(plot_marker, "FutureCanopy", Vector3(0, 3.4, 0), Vector3(3.0, 2.0, 2.8), Color("#44a764"))
+	else:
+		_cube(plot_marker, "EmptyPlot", Vector3(0, 0.04, 0), Vector3(1.7, 0.08, 1.7), Color("#b6a49c"))
+	_update_timeline_hud()
+
+func _travel_time() -> void:
+	in_past = not in_past
+	_refresh_timeline()
+	if message_label != null:
+		if in_past:
+			message_label.text = "YEAR 1926: Find the glowing seed plot east of town."
+		elif planted_seed:
+			message_label.text = "YEAR 2026: Your seed grew into a giant tree!"
+		else:
+			message_label.text = "YEAR 2026: The plot is empty. Change the past!"
+
+func _interact() -> void:
+	if player.position.distance_to(PLOT) > 2.5:
+		message_label.text = "Get closer to the plot on the east side of town."
+		return
+	if in_past and not planted_seed:
+		planted_seed = true
+		message_label.text = "Seed planted! Return to 2026 to see what changes."
+		_refresh_timeline()
+	elif in_past:
+		message_label.text = "Your seed is already growing. Visit the future!"
+	else:
+		message_label.text = "Travel to 1926 to change this empty plot."
+
+func _update_timeline_hud() -> void:
+	if era_button != null:
+		era_button.text = "TRAVEL TO 2026" if in_past else "TRAVEL TO 1926"
+	if action_button != null:
+		action_button.text = "PLANT SEED" if in_past else "INSPECT PLOT"
+
 func _build_player() -> void:
 	player = Node3D.new()
 	player.name = "Player"
@@ -197,14 +263,14 @@ func _build_hud() -> void:
 	hud.add_child(root)
 	var title := Label.new()
 	title.name = "Title"
-	title.text = "RPG ATTEMPT  |  CITY DISTRICT"
+	title.text = "CHRONO TOWN  |  FIRST PARADOX"
 	title.position = Vector2(18, 16)
 	title.add_theme_font_size_override("font_size", 19)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(title)
 	var hint := Label.new()
 	hint.name = "Hint"
-	hint.text = "Explore the town  •  Drag left to move  •  WASD"
+	hint.text = "Change the past. Discover the future."
 	hint.position = Vector2(18, 46)
 	hint.add_theme_font_size_override("font_size", 13)
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -216,6 +282,26 @@ func _build_hud() -> void:
 	pad.modulate = Color(1, 1, 1, 0.6)
 	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(pad)
+	var era := Button.new()
+	era.name = "EraButton"
+	era_button = era
+	era.text = "TRAVEL TO 1926"
+	era.custom_minimum_size = Vector2(175, 54)
+	era.pressed.connect(_travel_time)
+	root.add_child(era)
+	var action := Button.new()
+	action.name = "ActionButton"
+	action_button = action
+	action.text = "INSPECT PLOT"
+	action.custom_minimum_size = Vector2(175, 54)
+	action.pressed.connect(_interact)
+	root.add_child(action)
+	message_label = Label.new()
+	message_label.name = "StoryMessage"
+	message_label.text = "YEAR 2026: Travel to 1926 and plant a seed."
+	message_label.add_theme_font_size_override("font_size", 15)
+	message_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(message_label)
 	_layout_hud()
 
 func _layout_hud() -> void:
@@ -224,6 +310,13 @@ func _layout_hud() -> void:
 	var pad := hud.get_node_or_null("HUD/Pad") as Label
 	if pad != null:
 		pad.position = Vector2(35, get_viewport().get_visible_rect().size.y - 150)
+	var viewport_size := get_viewport().get_visible_rect().size
+	if era_button != null:
+		era_button.position = Vector2(viewport_size.x - 195, 18)
+	if action_button != null:
+		action_button.position = Vector2(viewport_size.x - 195, 82)
+	if message_label != null:
+		message_label.position = Vector2(18, viewport_size.y - 40)
 
 func _input(event: InputEvent) -> void:
 	var size := get_viewport().get_visible_rect().size
