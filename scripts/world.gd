@@ -20,6 +20,10 @@ var obstacles: Array[Rect2] = []
 var rng := RandomNumberGenerator.new()
 var in_past := false
 var planted_seed := false
+var repaired_clock := false
+var era_visuals: Node3D
+const CLOCK_SITE := Vector3(-7, 0, 7)
+const SAVE_PATH := "user://chrono_town.json"
 var era_objects: Node3D
 var plot_marker: Node3D
 var message_label: Label
@@ -29,10 +33,12 @@ const PLOT := Vector3(7, 0, 7)
 var city_atlas: Texture2D = preload("res://assets/kenney/city_atlas.png")
 
 func _ready() -> void:
+	_load_progress()
 	rng.seed = 20261101
 	_build_world()
 	_build_player()
 	_build_era_objects()
+	_build_era_visuals()
 	_build_camera()
 	_build_hud()
 	get_viewport().size_changed.connect(_layout_hud)
@@ -150,6 +156,49 @@ func _build_tree(at: Vector3) -> void:
 	_atlas_sprite(tree, "KenneyCityTree", Rect2(176, 88, 16, 24), Vector3(0, 1.75, 0.9), 0.12)
 	obstacles.append(Rect2(Vector2(at.x - 0.55, at.z - 0.55), Vector2(1.1, 1.1)))
 
+func _load_progress() -> void:
+	if not FileAccess.file_exists(SAVE_PATH):
+		return
+	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if file == null:
+		return
+	var data = JSON.parse_string(file.get_as_text())
+	if typeof(data) == TYPE_DICTIONARY:
+		planted_seed = data.get("planted_seed", false) == true
+		repaired_clock = data.get("repaired_clock", false) == true
+
+func _save_progress() -> void:
+	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if file != null:
+		file.store_string(JSON.stringify({"version": 1, "planted_seed": planted_seed, "repaired_clock": repaired_clock}))
+
+func _build_era_visuals() -> void:
+	era_visuals = Node3D.new()
+	era_visuals.name = "EraVisuals"
+	add_child(era_visuals)
+	_refresh_era_visuals()
+
+func _refresh_era_visuals() -> void:
+	if era_visuals == null:
+		return
+	for child in era_visuals.get_children():
+		era_visuals.remove_child(child)
+		child.queue_free()
+	if in_past:
+		for z in [-10, -5, 0, 5, 10]:
+			_cube(era_visuals, "OldLantern", Vector3(-3.6, 1.1, z), Vector3(0.17, 2.2, 0.17), Color("#6b503c"))
+			_cube(era_visuals, "LanternGlow", Vector3(-3.6, 2.3, z), Vector3(0.45, 0.38, 0.45), Color("#f9c26b"))
+		_cube(era_visuals, "OldClock", CLOCK_SITE + Vector3(0, 0.65, 0), Vector3(1.3, 1.3, 1.3), Color("#9e7e6b"))
+	else:
+		for z in [-10, -5, 0, 5, 10]:
+			_cube(era_visuals, "ModernLight", Vector3(-3.6, 1.3, z), Vector3(0.13, 2.6, 0.13), Color("#6a728c"))
+			_cube(era_visuals, "LightHead", Vector3(-3.6, 2.7, z), Vector3(0.6, 0.28, 0.45), Color("#e3f6ff"))
+		if repaired_clock:
+			_cube(era_visuals, "ClockTower", CLOCK_SITE + Vector3(0, 1.8, 0), Vector3(1.5, 3.6, 1.5), Color("#b6a5d3"))
+			_cube(era_visuals, "ClockFace", CLOCK_SITE + Vector3(0, 3.2, 0.82), Vector3(0.85, 0.85, 0.12), Color("#f9df9b"))
+		else:
+			_cube(era_visuals, "ClockRuins", CLOCK_SITE + Vector3(0, 0.4, 0), Vector3(1.5, 0.8, 1.5), Color("#787486"))
+
 func _build_era_objects() -> void:
 	era_objects = Node3D.new()
 	era_objects.name = "TimelineObjects"
@@ -180,6 +229,7 @@ func _refresh_timeline() -> void:
 func _travel_time() -> void:
 	in_past = not in_past
 	_refresh_timeline()
+	_refresh_era_visuals()
 	if message_label != null:
 		if in_past:
 			message_label.text = "YEAR 1926: Find the glowing seed plot east of town."
@@ -189,11 +239,23 @@ func _travel_time() -> void:
 			message_label.text = "YEAR 2026: The plot is empty. Change the past!"
 
 func _interact() -> void:
+	if player.position.distance_to(CLOCK_SITE) <= 2.5:
+		if in_past and not repaired_clock:
+			repaired_clock = true
+			_save_progress()
+			_refresh_era_visuals()
+			message_label.text = "Clock repaired! Return to 2026 to see the tower."
+		elif in_past:
+			message_label.text = "The old clock is ticking again."
+		else:
+			message_label.text = "The clock tower survived!" if repaired_clock else "Clock ruins. Repair it in 1926!"
+		return
 	if player.position.distance_to(PLOT) > 2.5:
-		message_label.text = "Get closer to the plot on the east side of town."
+		message_label.text = "Find the east seed plot (+7,+7) or west clock (-7,+7)."
 		return
 	if in_past and not planted_seed:
 		planted_seed = true
+		_save_progress()
 		message_label.text = "Seed planted! Return to 2026 to see what changes."
 		_refresh_timeline()
 	elif in_past:
@@ -263,7 +325,7 @@ func _build_hud() -> void:
 	hud.add_child(root)
 	var title := Label.new()
 	title.name = "Title"
-	title.text = "CHRONO TOWN  |  FIRST PARADOX"
+	title.text = "CHRONO TOWN  |  TWO TIMELINES"
 	title.position = Vector2(18, 16)
 	title.add_theme_font_size_override("font_size", 19)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
