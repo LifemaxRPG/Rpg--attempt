@@ -13,25 +13,24 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Install Java and Android SDK
+      - name: Install Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Configure preinstalled Android SDK
+      - name: Configure Android SDK
         shell: bash
         run: |
           set -euo pipefail
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           test -d "$ANDROID_SDK_ROOT"
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --version
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
       - name: Create Android debug keystore
         shell: bash
         run: |
           mkdir -p "$HOME/.android"
-          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=RPG Attempt,C=US"
+          keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=RPG Attempt,C=US"
       - name: Download Godot and export templates
         shell: bash
         run: |
@@ -47,7 +46,7 @@ jobs:
           cp -a /tmp/godot-templates/templates/. "$HOME/.local/share/godot/export_templates/${VERSION}.stable/"
       - name: Import and validate project
         run: godot --headless --path . --editor --quit
-      - name: Configure Godot Android export paths
+      - name: Configure Godot Android paths
         shell: bash
         run: |
           set -euo pipefail
@@ -57,23 +56,30 @@ jobs:
           config_dir = Path.home() / ".config" / "godot"
           candidates = sorted(config_dir.glob("editor_settings-*.tres"))
           if not candidates:
-              raise SystemExit(f"Godot editor settings not found in {config_dir}")
+              raise SystemExit("Godot editor settings not found")
           path = candidates[-1]
           content = path.read_text()
-          java_home = os.environ["JAVA_HOME"]
-          android_home = os.environ["ANDROID_SDK_ROOT"]
           for key, value in (
-              ("export/android/android_sdk_path", android_home),
-              ("export/android/java_sdk_path", java_home),
+              ("export/android/android_sdk_path", os.environ["ANDROID_SDK_ROOT"]),
+              ("export/android/java_sdk_path", os.environ["JAVA_HOME"]),
           ):
               line = f'{key} = "{value}"'
-              if key in content:
-                  import re
-                  content = re.sub(r'^' + re.escape(key) + r' = .*        env:
+              lines = content.splitlines()
+              lines = [line if not item.startswith(key + " =") else line for item in lines]
+              if not any(item.startswith(key + " =") for item in content.splitlines()):
+                  lines.append(line)
+              content = "\n".join(lines) + "\n"
+          path.write_text(content)
+          print("Configured:", path)
+          PY
+      - name: Export APK
+        shell: bash
+        env:
           GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /home/runner/.android/debug.keystore
           GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
           GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
         run: |
+          set -euo pipefail
           mkdir -p build
           godot --headless --verbose --path . --export-debug "Android" build/rpg-attempt-debug.apk
           test -s build/rpg-attempt-debug.apk
@@ -81,39 +87,15 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          echo "=== Android SDK ==="
+          echo "=== Android SDK and Java ==="
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
           echo "JAVA_HOME=${JAVA_HOME:-unset}"
-          echo "=== Godot export preset ==="
+          echo "=== Export preset ==="
           cat export_presets.cfg
-          echo "=== Android signing key ==="
+          echo "=== Signing key ==="
           ls -l "$HOME/.android/debug.keystore" || true
-          echo "=== Editor settings path keys ==="
+          echo "=== Editor paths ==="
           grep -E "export/android/(android_sdk_path|java_sdk_path)" "$HOME"/.config/godot/editor_settings-*.tres || true
-          echo "=== Output files ==="
-          find build -maxdepth 2 -type f -ls || true
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rpg-attempt-android-debug
-          path: build/rpg-attempt-debug.apk
-          if-no-files-found: error
-, lambda _: line, content, flags=re.M)
-              else:
-                  if "[resource]" not in content:
-                      raise SystemExit("Unexpected Godot editor settings format")
-                  content = content.replace("[resource]", "[resource]\\n" + line, 1)
-          path.write_text(content)
-          print(f"Configured Godot export paths in {path}")
-          PY
-      - name: Export APK
-        env:
-          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /home/runner/.android/debug.keystore
-          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
-          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
-        run: |
-          mkdir -p build
-          godot --headless --path . --export-debug "Android" build/rpg-attempt-debug.apk
-          test -s build/rpg-attempt-debug.apk
       - uses: actions/upload-artifact@v4
         with:
           name: rpg-attempt-android-debug
