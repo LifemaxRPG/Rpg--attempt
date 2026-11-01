@@ -47,6 +47,49 @@ jobs:
           cp -a /tmp/godot-templates/templates/. "$HOME/.local/share/godot/export_templates/${VERSION}.stable/"
       - name: Import and validate project
         run: godot --headless --path . --editor --quit
+      - name: Configure Godot Android export paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          config_dir = Path.home() / ".config" / "godot"
+          candidates = sorted(config_dir.glob("editor_settings-*.tres"))
+          if not candidates:
+              raise SystemExit(f"Godot editor settings not found in {config_dir}")
+          path = candidates[-1]
+          content = path.read_text()
+          java_home = os.environ["JAVA_HOME"]
+          android_home = os.environ["ANDROID_SDK_ROOT"]
+          for key, value in (
+              ("export/android/android_sdk_path", android_home),
+              ("export/android/java_sdk_path", java_home),
+          ):
+              line = f'{key} = "{value}"'
+              if key in content:
+                  import re
+                  content = re.sub(r'^' + re.escape(key) + r' = .*        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /home/runner/.android/debug.keystore
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+        run: |
+          mkdir -p build
+          godot --headless --path . --export-debug "Android" build/rpg-attempt-debug.apk
+          test -s build/rpg-attempt-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpg-attempt-android-debug
+          path: build/rpg-attempt-debug.apk
+          if-no-files-found: error
+, lambda _: line, content, flags=re.M)
+              else:
+                  if "[resource]" not in content:
+                      raise SystemExit("Unexpected Godot editor settings format")
+                  content = content.replace("[resource]", "[resource]\\n" + line, 1)
+          path.write_text(content)
+          print(f"Configured Godot export paths in {path}")
+          PY
       - name: Export APK
         env:
           GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /home/runner/.android/debug.keystore
