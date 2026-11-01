@@ -18,6 +18,7 @@ var facing := Vector2.DOWN
 var elapsed := 0.0
 var obstacles: Array[Rect2] = []
 var rng := RandomNumberGenerator.new()
+var city_atlas: Texture2D = preload("res://assets/kenney/city_atlas.png")
 
 func _ready() -> void:
 	rng.seed = 20261101
@@ -44,6 +45,22 @@ func _cube(parent: Node3D, name: String, position: Vector3, size: Vector3, color
 	mesh_instance.position = position
 	parent.add_child(mesh_instance)
 	return mesh_instance
+
+func _atlas_sprite(parent: Node3D, label: String, region: Rect2, position: Vector3, pixel_size := 0.1) -> Sprite3D:
+	var texture := AtlasTexture.new()
+	texture.atlas = city_atlas
+	texture.region = region
+	var sprite := Sprite3D.new()
+	sprite.name = label
+	sprite.texture = texture
+	sprite.pixel_size = pixel_size
+	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	sprite.shaded = false
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	sprite.position = position
+	parent.add_child(sprite)
+	return sprite
 
 func _build_world() -> void:
 	_cube(self, "Grass", Vector3(0, -0.15, 0), Vector3(36, 0.3, 36), Color("#5aaf58"))
@@ -96,6 +113,8 @@ func _build_city_details() -> void:
 	for x in [-11.5, 11.5]:
 		_cube(self, "Planter", Vector3(x, 0.34, 3.5), Vector3(1.1, 0.65, 1.1), Color("#a46e78"))
 		_cube(self, "PlanterLeaves", Vector3(x, 0.82, 3.5), Vector3(0.94, 0.48, 0.94), Color("#39ad62"))
+	for x in [-13, 13]:
+		_atlas_sprite(self, "KenneyTownDecoration", Rect2(160, 88, 16, 24), Vector3(x, 1.45, 8), 0.11)
 	for z in [-15, 15]:
 		_cube(self, "TownBoundary", Vector3(0, 0.3, z), Vector3(35, 0.6, 0.2), Color("#68627d"))
 
@@ -104,6 +123,8 @@ func _build_house(at: Vector3, wall: Color, roof: Color) -> void:
 	house.position = at
 	add_child(house)
 	_cube(house, "Walls", Vector3(0, 1.4, 0), Vector3(4.2, 2.8, 3.8), wall)
+	var facade_x := 0.0 if at.x < 0.0 else 40.0
+	_atlas_sprite(house, "KenneyCityFacade", Rect2(facade_x, 56, 32, 32), Vector3(0, 1.55, 2.07), 0.12)
 	_cube(house, "Roof", Vector3(0, 3.05, 0), Vector3(5.1, 0.65, 4.5), roof)
 	_cube(house, "Door", Vector3(0, 0.85, 1.94), Vector3(0.95, 1.7, 0.12), Color("#78513e"))
 	for x in [-1.35, 1.35]:
@@ -117,6 +138,7 @@ func _build_tree(at: Vector3) -> void:
 	_cube(tree, "Trunk", Vector3(0, 0.75, 0), Vector3(0.5, 1.5, 0.5), Color("#80543b"))
 	_cube(tree, "CanopyLow", Vector3(0, 2.05, 0), Vector3(2.0, 1.5, 2.0), Color("#3f8e4b"))
 	_cube(tree, "CanopyTop", Vector3(0, 3.0, 0), Vector3(1.45, 0.85, 1.45), Color("#58ab55"))
+	_atlas_sprite(tree, "KenneyCityTree", Rect2(176, 88, 16, 24), Vector3(0, 1.75, 0.9), 0.12)
 	obstacles.append(Rect2(Vector2(at.x - 0.55, at.z - 0.55), Vector2(1.1, 1.1)))
 
 func _build_player() -> void:
