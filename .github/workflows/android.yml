@@ -1,0 +1,52 @@
+name: Android Debug APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Java and Android SDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android platform and build tools
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - name: Download Godot and export templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=4.4.1
+          wget -q "https://github.com/godotengine/godot/releases/download/${VERSION}-stable/Godot_v${VERSION}-stable_linux.x86_64.zip"
+          unzip -q "Godot_v${VERSION}-stable_linux.x86_64.zip"
+          chmod +x "Godot_v${VERSION}-stable_linux.x86_64"
+          sudo mv "Godot_v${VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+          mkdir -p "$HOME/.local/share/godot/export_templates/${VERSION}.stable"
+          wget -q "https://github.com/godotengine/godot/releases/download/${VERSION}-stable/Godot_v${VERSION}-stable_export_templates.tpz"
+          unzip -q "Godot_v${VERSION}-stable_export_templates.tpz" -d /tmp/godot-templates
+          cp -a /tmp/godot-templates/templates/. "$HOME/.local/share/godot/export_templates/${VERSION}.stable/"
+      - name: Import and validate project
+        run: godot --headless --path . --editor --quit
+      - name: Export APK
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /home/runner/.android/debug.keystore
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+        run: |
+          mkdir -p build
+          godot --headless --path . --export-debug "Android" build/rpg-attempt-debug.apk
+          test -s build/rpg-attempt-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpg-attempt-android-debug
+          path: build/rpg-attempt-debug.apk
+          if-no-files-found: error
