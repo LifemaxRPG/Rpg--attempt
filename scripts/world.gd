@@ -22,6 +22,10 @@ var in_past := false
 var planted_seed := false
 var repaired_clock := false
 var era_visuals: Node3D
+var journal_panel: PanelContainer
+var journal_text: Label
+var npc: Node3D
+const NPC_SITE := Vector3(0, 0, -3)
 const CLOCK_SITE := Vector3(-7, 0, 7)
 const SAVE_PATH := "user://chrono_town.json"
 var era_objects: Node3D
@@ -39,6 +43,7 @@ func _ready() -> void:
 	_build_player()
 	_build_era_objects()
 	_build_era_visuals()
+	_build_npc()
 	_build_camera()
 	_build_hud()
 	get_viewport().size_changed.connect(_layout_hud)
@@ -230,6 +235,7 @@ func _travel_time() -> void:
 	in_past = not in_past
 	_refresh_timeline()
 	_refresh_era_visuals()
+	_update_journal()
 	if message_label != null:
 		if in_past:
 			message_label.text = "YEAR 1926: Find the glowing seed plot east of town."
@@ -239,10 +245,14 @@ func _travel_time() -> void:
 			message_label.text = "YEAR 2026: The plot is empty. Change the past!"
 
 func _interact() -> void:
+	if player.position.distance_to(NPC_SITE) <= 2.5:
+		_talk_historian()
+		return
 	if player.position.distance_to(CLOCK_SITE) <= 2.5:
 		if in_past and not repaired_clock:
 			repaired_clock = true
 			_save_progress()
+			_update_journal()
 			_refresh_era_visuals()
 			message_label.text = "Clock repaired! Return to 2026 to see the tower."
 		elif in_past:
@@ -251,11 +261,12 @@ func _interact() -> void:
 			message_label.text = "The clock tower survived!" if repaired_clock else "Clock ruins. Repair it in 1926!"
 		return
 	if player.position.distance_to(PLOT) > 2.5:
-		message_label.text = "Find the east seed plot (+7,+7) or west clock (-7,+7)."
+		message_label.text = "Explore the east seed plot, west clock, or north historian."
 		return
 	if in_past and not planted_seed:
 		planted_seed = true
 		_save_progress()
+		_update_journal()
 		message_label.text = "Seed planted! Return to 2026 to see what changes."
 		_refresh_timeline()
 	elif in_past:
@@ -268,6 +279,41 @@ func _update_timeline_hud() -> void:
 		era_button.text = "TRAVEL TO 2026" if in_past else "TRAVEL TO 1926"
 	if action_button != null:
 		action_button.text = "PLANT SEED" if in_past else "INSPECT PLOT"
+
+func _build_npc() -> void:
+	npc = Node3D.new()
+	npc.name = "TownHistorian"
+	npc.position = NPC_SITE
+	add_child(npc)
+	_cube(npc, "Coat", Vector3(0, 0.72, 0), Vector3(0.65, 0.9, 0.42), Color("#805caa"))
+	_cube(npc, "Head", Vector3(0, 1.4, 0), Vector3(0.5, 0.5, 0.48), Color("#e8b78d"))
+	_cube(npc, "Hat", Vector3(0, 1.78, 0), Vector3(0.85, 0.22, 0.68), Color("#51436e"))
+	_cube(npc, "HatTop", Vector3(0, 1.97, 0), Vector3(0.52, 0.3, 0.5), Color("#51436e"))
+	_atlas_sprite(npc, "HistorianBadge", Rect2(160, 88, 16, 24), Vector3(0, 1.2, 0.34), 0.045)
+
+func _talk_historian() -> void:
+	if in_past:
+		message_label.text = "Historian: A clock and a seed can rewrite a century."
+	elif planted_seed and repaired_clock:
+		message_label.text = "Historian: Both landmarks survived! You've changed our town."
+	elif planted_seed:
+		message_label.text = "Historian: That ancient tree wasn't here yesterday..."
+	elif repaired_clock:
+		message_label.text = "Historian: The restored clock has a mysterious history."
+	else:
+		message_label.text = "Historian: Our town lost its clock and its oldest tree."
+
+func _update_journal() -> void:
+	if journal_text == null:
+		return
+	var tree_status := "DONE - Ancient tree thrives in 2026" if planted_seed else "OPEN - Plant a seed in 1926 (east)"
+	var clock_status := "DONE - Clock tower restored in 2026" if repaired_clock else "OPEN - Repair clock in 1926 (west)"
+	journal_text.text = "THE FIRST PARADOX\\n\\n1. %s\\n\\n2. %s\\n\\nTalk to the historian near the north road.\\nProgress saves automatically." % [tree_status, clock_status]
+
+func _toggle_journal() -> void:
+	journal_panel.visible = not journal_panel.visible
+	if journal_panel.visible:
+		_update_journal()
 
 func _build_player() -> void:
 	player = Node3D.new()
@@ -325,7 +371,7 @@ func _build_hud() -> void:
 	hud.add_child(root)
 	var title := Label.new()
 	title.name = "Title"
-	title.text = "CHRONO TOWN  |  TWO TIMELINES"
+	title.text = "CHRONO TOWN  |  THE FIRST PARADOX"
 	title.position = Vector2(18, 16)
 	title.add_theme_font_size_override("font_size", 19)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -364,6 +410,23 @@ func _build_hud() -> void:
 	message_label.add_theme_font_size_override("font_size", 15)
 	message_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(message_label)
+	var journal_button := Button.new()
+	journal_button.name = "JournalButton"
+	journal_button.text = "QUEST JOURNAL"
+	journal_button.position = Vector2(18, 110)
+	journal_button.custom_minimum_size = Vector2(175, 48)
+	journal_button.pressed.connect(_toggle_journal)
+	root.add_child(journal_button)
+	journal_panel = PanelContainer.new()
+	journal_panel.name = "JournalPanel"
+	journal_panel.position = Vector2(18, 165)
+	journal_panel.custom_minimum_size = Vector2(390, 195)
+	journal_panel.visible = false
+	root.add_child(journal_panel)
+	journal_text = Label.new()
+	journal_text.add_theme_font_size_override("font_size", 16)
+	journal_panel.add_child(journal_text)
+	_update_journal()
 	_layout_hud()
 
 func _layout_hud() -> void:
