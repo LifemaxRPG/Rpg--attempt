@@ -53,24 +53,32 @@ jobs:
           python3 - <<'PY'
           import os
           from pathlib import Path
+
           config_dir = Path.home() / ".config" / "godot"
           candidates = sorted(config_dir.glob("editor_settings-*.tres"))
           if not candidates:
               raise SystemExit("Godot editor settings not found")
           path = candidates[-1]
           content = path.read_text()
-          for key, value in (
-              ("export/android/android_sdk_path", os.environ["ANDROID_SDK_ROOT"]),
-              ("export/android/java_sdk_path", os.environ["JAVA_HOME"]),
-          ):
-              line = f'{key} = "{value}"'
-              lines = content.splitlines()
-              lines = [line if not item.startswith(key + " =") else line for item in lines]
-              if not any(item.startswith(key + " =") for item in content.splitlines()):
-                  lines.append(line)
-              content = "\n".join(lines) + "\n"
-          path.write_text(content)
-          print("Configured:", path)
+          if not content.lstrip().startswith("[gd_resource"):
+              raise SystemExit("Unexpected Godot editor settings format")
+          settings = {
+              "export/android/android_sdk_path": os.environ["ANDROID_SDK_ROOT"],
+              "export/android/java_sdk_path": os.environ["JAVA_HOME"],
+          }
+          lines = content.splitlines()
+          for key, value in settings.items():
+              new_line = f'{key} = "{value}"'
+              for index, old_line in enumerate(lines):
+                  if old_line.startswith(key + " ="):
+                      lines[index] = new_line
+                      break
+              else:
+                  lines.append(new_line)
+          path.write_text("\n".join(lines) + "\n")
+          if not path.read_text().lstrip().startswith("[gd_resource"):
+              raise SystemExit("Godot editor settings header lost")
+          print(f"Updated Godot editor settings: {path}")
           PY
       - name: Export APK
         shell: bash
