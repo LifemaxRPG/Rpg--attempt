@@ -8,6 +8,7 @@ const PLAYER_RADIUS := 0.36
 const PIXEL_SCALE := 3
 const TILE_SIZE := 32
 
+var procedural_world: Node3D
 var player: Node3D
 var camera: Camera3D
 var hud: CanvasLayer
@@ -42,6 +43,9 @@ func _ready() -> void:
 	_load_progress()
 	rng.seed = 20261101
 	_build_world()
+	procedural_world = preload("res://scripts/procedural_world.gd").new()
+	procedural_world.name = "ProceduralWorld"
+	add_child(procedural_world)
 	_build_player()
 	_build_era_objects()
 	_build_era_visuals()
@@ -137,8 +141,6 @@ func _build_city_details() -> void:
 		_cube(self, "PlanterLeaves", Vector3(x, 0.82, 3.5), Vector3(0.94, 0.48, 0.94), Color("#39ad62"))
 	for x in [-13, 13]:
 		_atlas_sprite(self, "KenneyTownDecoration", Rect2(160, 88, 16, 24), Vector3(x, 1.45, 8), 0.11)
-	for z in [-15, 15]:
-		_cube(self, "TownBoundary", Vector3(0, 0.3, z), Vector3(35, 0.6, 0.2), Color("#68627d"))
 
 func _build_house(at: Vector3, wall: Color, roof: Color) -> void:
 	var house := Node3D.new()
@@ -250,6 +252,7 @@ func _travel_time() -> void:
 	in_past = not in_past
 	_refresh_timeline()
 	_refresh_era_visuals()
+	procedural_world.set_era(in_past)
 	_update_journal()
 	if message_label != null:
 		if in_past:
@@ -507,6 +510,7 @@ func _physics_process(delta: float) -> void:
 		sprite.position.y = 0.72 + abs(sin(elapsed * 12.0)) * 0.045
 	else:
 		(player.get_node("CharacterSprite") as Sprite3D).position.y = 0.72
+	procedural_world.update_streaming(player.position)
 	var target := player.position + Vector3(0, 12, 13)
 	camera.position = camera.position.lerp(target, min(1.0, delta * 6.0))
 
@@ -519,7 +523,7 @@ func _move_with_collision(movement: Vector3) -> void:
 		player.position.z = candidate.z
 
 func _can_stand(point: Vector3) -> bool:
-	if abs(point.x) > WORLD_HALF or abs(point.z) > WORLD_HALF:
+	if abs(point.x) > 100000.0 or abs(point.z) > 100000.0:
 		return false
 	for obstacle in obstacles:
 		var expanded := obstacle.grow(PLAYER_RADIUS)
