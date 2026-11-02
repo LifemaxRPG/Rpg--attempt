@@ -22,6 +22,8 @@ var rng := RandomNumberGenerator.new()
 var in_past := false
 var planted_seed := false
 var repaired_clock := false
+var saved_player_position := Vector3(0, 0, 5)
+var save_elapsed := 0.0
 var founded_market := false
 const MARKET_SITE := Vector3(12, 0, -1)
 var era_visuals: Node3D
@@ -47,6 +49,7 @@ func _ready() -> void:
 	procedural_world.name = "ProceduralWorld"
 	add_child(procedural_world)
 	_build_player()
+	player.position = saved_player_position
 	_build_era_objects()
 	_build_era_visuals()
 	_build_npc()
@@ -175,12 +178,17 @@ func _load_progress() -> void:
 	if typeof(data) == TYPE_DICTIONARY:
 		planted_seed = data.get("planted_seed", false) == true
 		repaired_clock = data.get("repaired_clock", false) == true
+		in_past = data.get("in_past", false) == true
+		var px := float(data.get("player_x", 0.0))
+		var pz := float(data.get("player_z", 5.0))
+		if absf(px) < 99990.0 and absf(pz) < 99990.0:
+			saved_player_position = Vector3(px, 0, pz)
 		founded_market = data.get("founded_market", false) == true
 
 func _save_progress() -> void:
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file != null:
-		file.store_string(JSON.stringify({"version": 1, "planted_seed": planted_seed, "repaired_clock": repaired_clock, "founded_market": founded_market}))
+		file.store_string(JSON.stringify({"version": 1, "planted_seed": planted_seed, "repaired_clock": repaired_clock, "founded_market": founded_market, "in_past": in_past, "player_x": player.position.x, "player_z": player.position.z}))
 
 func _build_era_visuals() -> void:
 	era_visuals = Node3D.new()
@@ -250,6 +258,8 @@ func _refresh_timeline() -> void:
 
 func _travel_time() -> void:
 	in_past = not in_past
+	_save_progress()
+	_flash_era_change()
 	_refresh_timeline()
 	_refresh_era_visuals()
 	procedural_world.set_era(in_past)
@@ -261,6 +271,23 @@ func _travel_time() -> void:
 			message_label.text = "YEAR 2026: Your seed grew into a giant tree!"
 		else:
 			message_label.text = "YEAR 2026: The plot is empty. Change the past!"
+
+func _flash_era_change() -> void:
+	if hud == null:
+		return
+	var root := hud.get_node_or_null("HUD") as Control
+	if root == null:
+		return
+	var overlay := ColorRect.new()
+	overlay.name = "TimeTravelFlash"
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.color = Color("#e8c07a" if in_past else "#7ec8e3")
+	overlay.modulate.a = 0.45
+	root.add_child(overlay)
+	var tween := create_tween()
+	tween.tween_property(overlay, "modulate:a", 0.0, 0.55)
+	tween.tween_callback(overlay.queue_free)
 
 func _interact() -> void:
 	if player.position.distance_to(MARKET_SITE) <= 2.5:
@@ -491,6 +518,10 @@ func _input(event: InputEvent) -> void:
 		touch_vector = (event.position - touch_origin).limit_length(75.0) / 75.0
 
 func _physics_process(delta: float) -> void:
+	save_elapsed += delta
+	if save_elapsed >= 15.0:
+		save_elapsed = 0.0
+		_save_progress()
 	var direction := Vector2.ZERO
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
 		direction.x -= 1
