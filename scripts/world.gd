@@ -3,7 +3,7 @@ extends Node3D
 ## The environment is 3D; the player uses a camera-facing pixel-style sprite.
 
 const WORLD_HALF := 17.0
-const PLAYER_SPEED := 4.2
+const PLAYER_SPEED := 4.6
 const PLAYER_RADIUS := 0.36
 const PIXEL_SCALE := 3
 const TILE_SIZE := 32
@@ -24,6 +24,8 @@ var planted_seed := false
 var repaired_clock := false
 var saved_player_position := Vector3(0, 0, 5)
 var save_elapsed := 0.0
+var message_timer := 0.0
+var interact_prompt: Label
 var founded_market := false
 const MARKET_SITE := Vector3(12, 0, -1)
 var era_visuals: Node3D
@@ -264,13 +266,14 @@ func _travel_time() -> void:
 	_refresh_era_visuals()
 	procedural_world.set_era(in_past)
 	_update_journal()
-	if message_label != null:
-		if in_past:
-			message_label.text = "YEAR 1926: Find the glowing seed plot east of town."
-		elif planted_seed:
-			message_label.text = "YEAR 2026: Your seed grew into a giant tree!"
-		else:
-			message_label.text = "YEAR 2026: The plot is empty. Change the past!"
+	if in_past:
+		_show_message("YEAR 1926: The town is quieter. Leave your mark.")
+	elif planted_seed and repaired_clock and founded_market:
+		_show_message("YEAR 2026: The town remembers everything you did.")
+	elif planted_seed:
+		_show_message("YEAR 2026: Your seed grew into a giant tree!")
+	else:
+		_show_message("YEAR 2026: The plot is empty. Change the past!")
 
 func _flash_era_change() -> void:
 	if hud == null:
@@ -288,6 +291,30 @@ func _flash_era_change() -> void:
 	var tween := create_tween()
 	tween.tween_property(overlay, "modulate:a", 0.0, 0.55)
 	tween.tween_callback(overlay.queue_free)
+
+func _show_message(text: String) -> void:
+	if message_label == null:
+		return
+	message_label.text = text
+	message_label.modulate.a = 1.0
+	message_timer = 4.0
+
+func _update_interact_prompt() -> void:
+	if interact_prompt == null or player == null:
+		return
+	var hint := ""
+	if player.position.distance_to(PLOT) < 2.8:
+		hint = "PLANT SEED" if in_past and not planted_seed else "INSPECT PLOT"
+	elif player.position.distance_to(CLOCK_SITE) < 2.8:
+		hint = "REPAIR CLOCK" if in_past and not repaired_clock else "INSPECT CLOCK"
+	elif player.position.distance_to(MARKET_SITE) < 2.8:
+		hint = "FOUND MARKET" if in_past and not founded_market else "INSPECT MARKET"
+	elif player.position.distance_to(NPC_SITE) < 2.8:
+		hint = "TALK TO HISTORIAN"
+	interact_prompt.visible = hint != ""
+	interact_prompt.text = hint
+	if action_button != null:
+		action_button.text = hint if hint != "" else "INTERACT"
 
 func _interact() -> void:
 	if player.position.distance_to(MARKET_SITE) <= 2.5:
@@ -488,6 +515,12 @@ func _build_hud() -> void:
 	journal_text.add_theme_font_size_override("font_size", 16)
 	journal_panel.add_child(journal_text)
 	_update_journal()
+	interact_prompt = Label.new()
+	interact_prompt.name = "InteractPrompt"
+	interact_prompt.add_theme_font_size_override("font_size", 17)
+	interact_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	interact_prompt.visible = false
+	root.add_child(interact_prompt)
 	_layout_hud()
 
 func _layout_hud() -> void:
@@ -503,6 +536,8 @@ func _layout_hud() -> void:
 		action_button.position = Vector2(viewport_size.x - 195, 82)
 	if message_label != null:
 		message_label.position = Vector2(18, viewport_size.y - 40)
+	if interact_prompt != null:
+		interact_prompt.position = Vector2(viewport_size.x * 0.5 - 100, viewport_size.y - 85)
 
 func _input(event: InputEvent) -> void:
 	var size := get_viewport().get_visible_rect().size
@@ -542,8 +577,13 @@ func _physics_process(delta: float) -> void:
 	else:
 		(player.get_node("CharacterSprite") as Sprite3D).position.y = 0.72
 	procedural_world.update_streaming(player.position)
+	_update_interact_prompt()
+	if message_timer > 0.0:
+		message_timer = maxf(0.0, message_timer - delta)
+		if message_label != null:
+			message_label.modulate.a = minf(1.0, message_timer / 0.6)
 	var target := player.position + Vector3(0, 12, 13)
-	camera.position = camera.position.lerp(target, min(1.0, delta * 6.0))
+	camera.position = camera.position.lerp(target, min(1.0, delta * 7.0))
 
 func _move_with_collision(movement: Vector3) -> void:
 	var candidate := player.position + Vector3(movement.x, 0, 0)
